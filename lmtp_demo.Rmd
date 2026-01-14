@@ -1,0 +1,87 @@
+---
+title: "lmtp_demo"
+author: "Klaus Frieler"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(lmtp)
+source("utils.R")
+# taken from https://beyondtheate.com/03_info_estimators.html
+
+foo <- simulate_class_trick(seed = 786543)
+
+summary(get_density_ratios(foo))
+
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+tmle_man <- function(data = foo) {
+
+  browser()
+  density_ratios <- get_density_ratios(data)
+  # First compute the weights as the cumulative product of the density ratios
+  weights <- t(apply(density_ratios, 1, cumprod))
+  
+  predictions_natural <- matrix(NA, nrow = nrow(data), ncol = 2)
+  predictions_shifted <- matrix(NA, nrow = nrow(data), ncol = 2)
+  
+  # Set t = 2
+  # Because t + 1 = tau + 1, set the first pseudo outcome to the observed outcome
+  m3_d <- data$Y
+  
+  # Regress the pseudo outcome on the observed data
+  fit2 <- glm(m3_d ~ A2 + L2 + A1 + L1, data = data)
+  
+  # Generate the predictions for t = 2
+  predictions_natural[, 2] <- predict(fit2)
+  predictions_shifted[, 2] <- predict(fit2, mutate(data, A2 = d(A2)))
+  
+  # Perform the targeting step
+  targeting_fit2 <- glm(m3_d ~ offset(predictions_natural[, 2]), weights = weights[, 2])
+  
+  # Update predictions
+  predictions_natural[, 2] <- predictions_natural[, 2] + coef(targeting_fit2)
+  predictions_shifted[, 2] <- predictions_shifted[, 2] + coef(targeting_fit2)
+  
+  # Iterate, setting t - 1 = 1
+  # The new pseudo outcome is the targeted outcome under the shift at t + 1 = 2
+  m2_d <- predictions_shifted[, 2]
+  
+  # Regress the pseudo outcome on the observed data
+  fit1 <- glm(m2_d ~ A1 + L1, data = data)
+  
+  # Generate the predictions for t = 2
+  predictions_natural[, 1] <- predict(fit1)
+  predictions_shifted[, 1] <- predict(fit1, mutate(data, A1 = d(A1)))
+  
+  # Perform the targeting step
+  targeting_fit1 <- glm(m2_d ~ offset(predictions_natural[, 1]), weights = weights[, 1])
+  
+  # Update predictions
+  predictions_natural[, 1] <- predictions_natural[, 1] + coef(targeting_fit1)
+  predictions_shifted[, 1] <- predictions_shifted[, 1] + coef(targeting_fit1)
+  
+  mean(predictions_shifted[, 1])
+}
+
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

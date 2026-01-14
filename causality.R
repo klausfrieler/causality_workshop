@@ -66,6 +66,13 @@ factor_to_num <- function(fac, start = 0){
   as.integer(as.factor(fac)) - (1 - start)
 }
 
+setup_workspace <- function(){
+  master <- readRDS("data/flying_steps_data.rds")
+  master_red <- master %>% filter_gender()
+  assign("master", master, globalenv())
+  assign("master_red", master_red, globalenv())
+}
+  
 causal_effect <- function(data = master_red, 
                           outcome = all_outcomes, 
                           baseline = default_baseline, 
@@ -135,10 +142,35 @@ causal_effect <- function(data = master_red,
       
     }
                             
-    
+    #alt_form <- sprintf("%s ~ (%s) * %s", oc, paste(baseline, collapse = " + "), trt)
     fit <- lmtp_data  %>% select(all_of(c(baseline, oc, trt))) %>% 
       mutate(p_group = factor(p_group, levels = c("control", "dance"))) %>% 
       glm(as.formula(sprintf("%s ~ .", oc)), data =.)
+    #browser()
+    fit2 <- lmtp_data  %>% select(all_of(c(baseline, oc, trt))) %>% 
+      mutate(p_group = factor_to_num(p_group)) %>% 
+      glm(as.formula(sprintf("%s ~ .", oc)), data =.)
+    
+    ATE_std_reg_est <- stdReg::stdGlm(fit2, data = lmtp_data, X = "p_group", x = c(0, 1)) %>% 
+      summary() %>% 
+      pluck("est.table") %>% 
+      janitor::clean_names() %>% 
+      as_tibble()
+    
+    ATE_std_reg_d <- diff(ATE_std_reg_est$estimate)
+    ATE_std_reg_se <- sqrt(sum(ATE_std_reg_est$std_error^2))
+    ATE_std_reg_p <-  2 * pt(abs(ATE_std_reg_d / ATE_std_reg_se), nrow(lmtp_data) -1, lower.tail = FALSE)
+    
+    ATE_std_reg <- 
+      ATE_std_reg_est$estimate %>% 
+      t() %>% 
+      as_tibble() %>% 
+      set_names(c("ref", "shift")) %>% 
+      mutate(estimate = ATE_std_reg_d, 
+             std.error = ATE_std_reg_se, 
+             conf.low = estimate - 1.96*std.error, 
+             conf.high = estimate+  1.96*std.error, 
+             p.value = ATE_std_reg_p)
     
     raw_diff <- lmtp_data %>% 
       group_by(p_group) %>% 
@@ -157,7 +189,7 @@ causal_effect <- function(data = master_red,
              conf.high = estimate+  1.96*raw_se, 
              p.value = lmtp_data %>% rstatix::t_test(as.formula(sprintf("%s ~ p_group", oc))) %>% pluck("p"))
     
-    #browser()
+    browser()
     ATE_naive <- marginaleffects::avg_comparisons(fit, variables = trt, vcov = T) %>% 
       as_tibble() %>% 
       select(shift = predicted_lo, 
@@ -172,6 +204,7 @@ causal_effect <- function(data = master_red,
     bind_rows(ATE_raw %>% mutate(type = "RAW"),
               ATE_naive %>% mutate(type = "NAIVE"), 
               ATE_tmle %>% mutate(type = "LMPT_TMLE"),
+              ATE_std_reg %>% mutate(type = "STDREG"),
               if(!fast)ATE_tmle_tmle %>% mutate(type = "TMLE_TMLE") ) %>% 
       mutate(outcome = oc) %>% select(outcome, everything())
   })
