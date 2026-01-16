@@ -69,6 +69,36 @@ factor_to_num <- function(fac, start = 0){
 setup_workspace <- function(){
   master <- readRDS("data/flying_steps_data.rds")
   master_red <- master %>% filter_gender()
+  nhefs <- haven::read_sas("data/nhefs.sas7bdat")
+  
+  nhefs <- nhefs %>% 
+    mutate(
+      # add id and censored indicator
+      id = 1:n(),
+      censored = ifelse(is.na(wt82), 1, 0),
+      # recode age > 50 and years of school to categories
+      older = case_when(
+        is.na(age) ~ NA_real_,
+        age > 50 ~ 1,
+        TRUE ~ 0
+      ),
+      education = case_when(
+        school <  9 ~ 1,
+        school <  12 ~ 2,
+        school == 12 ~ 3,
+        school < 16 ~ 4,
+        TRUE ~ 5
+      )
+    ) %>% 
+    #  change categorical variables to factors
+    mutate_at(vars(sex, race, education, exercise, active), factor) 
+  nhefs_complete <- nhefs %>% 
+    drop_na(qsmk, sex, race, age, school, smokeintensity, smokeyrs, exercise, active, wt71, wt82, wt82_71, censored)
+  assign("foo", simulate_class_trick(seed = global_seed), globalenv())
+  assign("sim20", simulate_20_1(l1_effect = 0, mult = 1, seed = global_seed), globalenv())
+  assign("sim20_l1", simulate_20_1(l1_effect = -10, mult = 1, seed = global_seed), globalenv())
+  
+  assign("nhefs_complete", nhefs_complete, globalenv())
   assign("master", master, globalenv())
   assign("master_red", master_red, globalenv())
 }
