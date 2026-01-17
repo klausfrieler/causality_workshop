@@ -1,7 +1,7 @@
 library(tidyverse)
 library(lmtp)
 source("globals.R")
-
+messagef <- function(...) message(sprintf(...))
 default_baseline <-
   c(
     "gender",
@@ -102,12 +102,19 @@ setup_workspace <- function(){
   assign("master", master, globalenv())
   assign("master_red", master_red, globalenv())
 }
-  
+d1 <- function(data, trt){
+  rep("dance", nrow(data))
+}
+
+d0 <- function(data, trt){
+  rep("control", nrow(data))
+}
 causal_effect <- function(data = master_red, 
                           outcome = all_outcomes, 
                           baseline = default_baseline, 
                           trt = "p_group", 
                           differential = F,
+                          with_scale = F,
                           fast = T){
   
   d1 <- function(data, trt){
@@ -134,6 +141,10 @@ causal_effect <- function(data = master_red,
   print(nrow(lmtp_data))
   print(table(lmtp_data$p_group))
   map_dfr(outcome, function(oc){
+    if(with_scale){
+      lmtp_data[[{oc}]] <- scale(lmtp_data[[oc]]) %>% as.numeric()
+    }
+    
     treat <- lmtp_tmle(data = lmtp_data, 
                        trt = trt, 
                        outcome = oc,
@@ -219,7 +230,7 @@ causal_effect <- function(data = master_red,
              conf.high = estimate+  1.96*raw_se, 
              p.value = lmtp_data %>% rstatix::t_test(as.formula(sprintf("%s ~ p_group", oc))) %>% pluck("p"))
     
-    browser()
+    #browser()
     ATE_naive <- marginaleffects::avg_comparisons(fit, variables = trt, vcov = T) %>% 
       as_tibble() %>% 
       select(shift = predicted_lo, 
@@ -238,4 +249,86 @@ causal_effect <- function(data = master_red,
               if(!fast)ATE_tmle_tmle %>% mutate(type = "TMLE_TMLE") ) %>% 
       mutate(outcome = oc) %>% select(outcome, everything())
   })
+}
+
+time_varying_fs <- function(outcomes = all_outcomes, 
+                            time_vary = default_baseline[3:8],
+                            with_scale = F){
+  progressr::handlers(global = TRUE)
+  trt <- "p_group"
+  map_dfr(all_outcomes, function(oc){
+    data <- master_red %>% 
+      drop_na(all_of(c(all_outcomes[2], trt, time_vary)))  
+    if(with_scale){
+      data[[{oc}]] <- scale(data[[oc]]) %>% as.numeric()
+    }
+    data <- data %>% 
+      pivot_wider(id_cols = p_id, values_from = c(trt, oc, time_vary), names_from = "time_point")
+    time_vary_wide_1 <- data %>% select(ends_with(c("T1"))) %>% names() 
+    time_vary_wide_1<- time_vary_wide_1[sapply(time_vary, function(x) which(str_detect(time_vary_wide_1, x))) %>% as.vector()] 
+    time_vary_wide_2 <- data %>% select(ends_with(c("T4"))) %>% names() 
+    time_vary_wide_2<- time_vary_wide_2[sapply(time_vary, function(x) which(str_detect(time_vary_wide_2, x))) %>% as.vector()] 
+    
+    data <- data %>% 
+      left_join(master_red %>% select(all_of(c("gender", "age", "DEG.born_here", "p_id")))) %>% 
+      na.omit()
+    
+    #browser()
+    messagef("Outcome: %s, alwavys treat", oc)
+    d1 <- data %>% 
+      lmtp_tmle(trt = sprintf("%s_%s", trt, c("T1", "T4")), 
+                outcome = sprintf("%s_%s", oc, "T4"), 
+                baseline = c("gender", "age", "DEG.born_here"), 
+                time_vary = list(time_vary_wide_1, time_vary_wide_2), 
+                outcome_type = "continuous", 
+                shift = d1)
+    messagef("Outcome: %s, never treat", oc)
+    d0 <- data %>% 
+      lmtp_tmle(trt = sprintf("%s_%s", trt, c("T1", "T4")), 
+                outcome = sprintf("%s_%s", oc, "T4"), 
+                baseline = c("gender", "age", "DEG.born_here"), 
+                time_vary = list(time_vary_wide_1, time_vary_wide_2), 
+                outcome_type = "continuous", 
+                shift = d0)
+    stats <-  data %>% 
+      distinct(p_id, p_group_T1) %>% 
+      count(p_group_T1) %>% 
+      pivot_wider(names_from = p_group_T1, values_from = "n") %>%
+      set_names(sprintf("n_%s", names(.))) %>% 
+      mutate(n = n_control + n_dance)
+    
+    lmtp_contrast (d1, ref = d0) %>% 
+      pluck("estimates") %>% 
+      mutate(outcome = oc) %>% bind_cols(stats)
+    
+  })
+}
+
+plot_ATE_cmp <- function(cmp){
+  has_type <- "type" %in% names(cmp)
+  if(has_type) {
+    q <- cmp %>% ggplot(aes(x = outcome, 
+                            y = estimate, 
+                            color = type, 
+                            shape = p.value < .05)) 
+    
+  }
+  else{
+    q <- cmp %>% ggplot(aes(x = outcome, 
+                            y = estimate, 
+                            shape = p.value < .05)) 
+    
+  }
+  q <- q + geom_point(size = 3, 
+                      position = position_dodge(width = .2)) 
+  q <- q + coord_flip() 
+  q <- q + theme_classic() 
+  q <- q + geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = 0.1, position = position_dodge()) 
+  q <- q + geom_hline(yintercept = 0)  
+  q <- q + labs(x = "Outcomed", y = "ATE")
+  if(has_type){
+    q <- q + geom_line(aes(linetype = type, group = type)) 
+    q <- q + facet_wrap(~ type)
+  }
+  q
 }

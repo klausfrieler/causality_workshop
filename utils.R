@@ -194,5 +194,3 @@ simulate_kang_schafer <- function(n = 200, seed = global_seed){
                  y_pred_wrong = y_model_x)
 }
 
-foo <- simulate_class_trick(seed = global_seed)
-sim20 <- simulate_20_1(l1_effect = 0, mult = 1, seed = global_seed)

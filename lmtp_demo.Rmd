@@ -12,9 +12,6 @@ library(lmtp)
 source("utils.R")
 # taken from https://beyondtheate.com/03_info_estimators.html
 
-foo <- simulate_class_trick(seed = 786543)
-
-summary(get_density_ratios(foo))
 
 ```
 
