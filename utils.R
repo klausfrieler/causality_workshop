@@ -53,6 +53,7 @@ get_density_ratios <- function(data = foo, seed = 786543) {
   }
   density_ratios
 }
+
 tmle_man <- function(data = foo, d = d_foo) {
   
   browser()
@@ -142,7 +143,13 @@ sdr_man <- function(data = foo, d = d_foo){
   
   mean(uc_eif)
 }
-simulate_20_1 <- function(n, mult = 1, sd = 10, l1_effect = 0, sd_l1 = 1, seed = NULL){
+
+simulate_20_1 <- function(n, 
+                          mult = 1, 
+                          sd = 10, 
+                          l1_effect = 0, 
+                          sd_l1 = 1, 
+                          seed = NULL){
   set.seed(seed)
   spec <-
     tribble(~N, ~A0, ~L1, ~A1,~Y,
@@ -161,13 +168,17 @@ simulate_20_1 <- function(n, mult = 1, sd = 10, l1_effect = 0, sd_l1 = 1, seed =
            A0 = spec$A0[i], 
            L1 = spec$L1[i], 
            A1 = spec$A1[i])
-  }) %>% mutate(p_id = 1:nrow(.))   
-  ret %>% mutate(Y2 = pmax(0, Y + rnorm(nrow(.), (A1 + L1) * l1_effect, sd_l1))) 
+  }) %>% 
+    mutate(p_id = 1:nrow(.))   
+  ret %>% 
+    mutate(Y2 = pmax(0, Y + rnorm(nrow(.), (A1 + L1) * l1_effect, sd_l1))) 
 }
+
 expit <- function(x){
   #exp(x)/(1 + exp(x))
   1/(1 + exp(-x))
 }
+
 simulate_kang_schafer <- function(n = 200, seed = global_seed){
   set.seed(seed)
   z1 <- rnorm(n, 0, 1)

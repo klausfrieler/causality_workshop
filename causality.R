@@ -99,6 +99,7 @@ setup_workspace <- function(){
     mutate_at(vars(sex, race, education, exercise, active), factor) 
   nhefs_complete <- nhefs %>% 
     drop_na(qsmk, sex, race, age, school, smokeintensity, smokeyrs, exercise, active, wt71, wt82, wt82_71, censored)
+  
   assign("foo", simulate_class_trick(seed = global_seed), globalenv())
   assign("sim20", simulate_20_1(l1_effect = 0, mult = 1, seed = global_seed), globalenv())
   assign("sim20_l1", simulate_20_1(l1_effect = -10, mult = 1, seed = global_seed), globalenv())
@@ -263,7 +264,7 @@ time_varying_fs <- function(outcomes = all_outcomes,
                             with_scale = F){
   progressr::handlers(global = TRUE)
   trt <- "p_group"
-  map_dfr(all_outcomes, function(oc){
+  map_dfr(outcomes, function(oc){
     data <- master_red %>% 
       drop_na(all_of(c(all_outcomes[2], trt, time_vary)))  
     if(with_scale){
@@ -279,13 +280,28 @@ time_varying_fs <- function(outcomes = all_outcomes,
     data <- data %>% 
       left_join(master_red %>% select(all_of(c("gender", "age", "DEG.born_here", "p_id")))) %>% 
       na.omit()
-    
+    naive_fit <- lm(as.formula(sprintf("%s_T4 ~ %s", oc, 
+                                       paste(c(time_vary_wide_1, 
+                                               time_vary_wide_2, 
+                                               c("gender", "age", "DEG.born_here"), 
+                                               "p_group_T1",
+                                               sprintf("%s_T1", oc)), 
+                                             collapse = "+"))), data = data) 
     #browser()
-    messagef("Outcome: %s, alwavys treat", oc)
+    naive_ATE <- naive_fit %>% broom::tidy() %>% 
+      filter(term == "p_group_T1dance") %>%
+      select(-c(statistic, term)) %>% 
+      mutate(outcome = oc, 
+             conf.low = estimate - 1.96 * std.error, 
+             conf.high = estimate + 1.96 * std.error)
+    
+    messagef("Outcome: %s, always treat", oc)
+    baseline <- c("gender", "age", "DEG.born_here", sprintf("%s_%s", oc, "T1"))
+    #baseline <- baseline[-length(baseline)]
     d1 <- data %>% 
       lmtp_tmle(trt = sprintf("%s_%s", trt, c("T1", "T4")), 
                 outcome = sprintf("%s_%s", oc, "T4"), 
-                baseline = c("gender", "age", "DEG.born_here"), 
+                baseline = baseline, 
                 time_vary = list(time_vary_wide_1, time_vary_wide_2), 
                 outcome_type = "continuous", 
                 shift = d1)
@@ -293,7 +309,7 @@ time_varying_fs <- function(outcomes = all_outcomes,
     d0 <- data %>% 
       lmtp_tmle(trt = sprintf("%s_%s", trt, c("T1", "T4")), 
                 outcome = sprintf("%s_%s", oc, "T4"), 
-                baseline = c("gender", "age", "DEG.born_here"), 
+                baseline = baseline, 
                 time_vary = list(time_vary_wide_1, time_vary_wide_2), 
                 outcome_type = "continuous", 
                 shift = d0)
@@ -306,7 +322,9 @@ time_varying_fs <- function(outcomes = all_outcomes,
     
     lmtp_contrast (d1, ref = d0) %>% 
       pluck("estimates") %>% 
-      mutate(outcome = oc) %>% bind_cols(stats)
+      mutate(outcome = oc) %>% bind_cols(stats) %>% 
+      mutate(type = "TMLE") %>% 
+      bind_rows(naive_ATE %>% mutate(type = "NAIVE"))
     
   })
 }
