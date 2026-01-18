@@ -9,28 +9,260 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(lmtp)
-source("utils.R")
+source("causality.R")
 # taken from https://beyondtheate.com/03_info_estimators.html
+setup_workspace()
 
 
 ```
 
-## R Markdown
+## Motivating Example from Ch. 20
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+First we sue TLME on the motivating example 20.1 from Ch. 20, without and with an additional L1 effect, added by us. 
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+### Original data
 
-```{r cars}
+```{r ch_20_1_no_effect}
+
+sim20_1_d1 <- sim20_l1 %>% 
+  mutate(L0 = 0) %>% 
+  lmtp_tmle(trt = c("A0", "A1"), 
+            outcome = "Y", 
+            time_vary = list("L0", "L1"), 
+            outcome_type = "continuous", 
+            shift = static_binary_on)
+
+sim20_1_d0 <- sim20_l1 %>% 
+  mutate(L0 = 0) %>% 
+  lmtp_tmle(trt = c("A0", "A1"), 
+            outcome = "Y",
+            time_vary = list("L0", "L1"), 
+            outcome_type = "continuous", 
+            shift = static_binary_off)
+lmtp_contrast(sim20_1_d1, ref = sim20_1_d0, type = "additive")
 
 ```
 
-## Including Plots
+### Original data plus added L1 effect
 
-You can also embed plots, for example:
+```{r ch_20_1_effect}
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+sim20_1_l1_d1 <- sim20_l1 %>% 
+  mutate(L0 = 0) %>% 
+  lmtp_tmle(trt = c("A0", "A1"), 
+            outcome = "Y2", 
+            time_vary = list("L0", "L1"), 
+            outcome_type = "continuous", 
+            shift = static_binary_on)
+
+sim20_1_l1_d0 <- sim20_l1 %>% 
+  mutate(L0 = 0) %>% 
+  lmtp_tmle(trt = c("A0", "A1"), 
+            outcome = "Y2",
+            time_vary = list("L0", "L1"), 
+            outcome_type = "continuous", 
+            shift = static_binary_off)
+
+lmtp_contrast(sim20_1_l1_d1, ref = sim20_1_l1_d0, type = "additive")
+
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+### Traditional models
+
+Now compare this to the ATE estimated with ``marginaleffects::avg_predictions`` base on simple linear regression 
+```{r ch_20_1_manual}
+fit <- sim20_l1 %>% 
+  glm(Y2 ~ A0 + A1 + L1, data = .) 
+
+fit_always_treat <- fit %>% 
+  marginaleffects::avg_predictions(newdata = sim20_l1 %>% 
+                                     mutate(A0 = 1 , 
+                                            A1 = 1)) %>% 
+  as_tibble()
+
+fit_never_treat <- fit %>% 
+  marginaleffects::avg_predictions(newdata = sim20_l1 %>% 
+                                     mutate(A0 = 0 , 
+                                            A1 = 0)) %>% 
+  as_tibble()
+ATE <- fit_always_treat$estimate - fit_never_treat$estimate
+se_ATE <- sqrt(fit_always_treat$std.error^2  + fit_never_treat$std.error^2)
+ci_lo_ATE <- ATE - 1.96 * se_ATE
+ci_hi_ATE <- ATE + 1.96 * se_ATE
+tibble(estimate = ATE, 
+       std.error = se_ATE, 
+       conf.low  = ci_lo_ATE, 
+       conf.high = ci_hi_ATE)
+
+
+```
+
+Finally, simple t-tests for both cases
+```{r ch20_t_tests}
+naive <- sim20_l1 %>% 
+  filter(A0 == 0 & A1 == 0 | A0 == 1 & A1 == 1) %>% 
+  mutate(trt = A0) 
+
+naive_ttest <- 
+  bind_cols(naive %>% rstatix::t_test(Y ~ trt), 
+          naive %>% rstatix::cohens_d(Y ~ trt) %>% 
+            select(effsize, magnitude)) %>% 
+  mutate(type = "no_effect")
+
+naive_l1 <- sim20_l1 %>% 
+  filter(A0 == 0 & A1 == 0 | A0 == 1 & A1 == 1) %>% 
+  mutate(trt = A0) 
+
+naive_l1_ttest <- 
+  bind_cols(naive_l1 %>% rstatix::t_test(Y2 ~ trt), 
+          naive_l1 %>% rstatix::cohens_d(Y2 ~ trt) %>% 
+            select(effsize, magnitude))%>% 
+  mutate(type = "l1_effect")
+
+ATE_no_effect <- naive %>% 
+  group_by(trt) %>% 
+  summarise(Y = mean(Y)) %>% pull(Y) %>% diff()
+
+ATE_l1_effect <- naive %>% 
+  group_by(trt) %>% 
+  summarise(Y2 = mean(Y2)) %>% pull(Y2) %>% diff()
+
+bind_rows(naive_ttest %>% mutate(estimate = ATE_no_effect), 
+          naive_l1_ttest %>% mutate(estimate = ATE_l1_effect)) %>% 
+  select(-starts_with("group")) %>% 
+  select(type, outcome = .y., estimate, cohens_d = effsize, p, everything())
+
+```
+We see that the simple models give (erroneus) significant effects for always treat vs. never treat
+
+## Smoking Cessation and Weight Gain
+Recall the data from Ch. 13 to 15 about Smoking cessation and weight gain. The G-Estimation, for example, gave an ATE of 3.44 (without censoring). Can we reproduce this value using TMLE?
+
+```{R nhef}
+nhefs_complete_ext <- nhefs_complete %>% 
+  mutate(age_p2 = age * age, 
+         smokeintensity_p2 = smokeintensity^2,
+         smokeyrs_p2 = smokeyrs^2,
+         wt71_p2 = wt71^2
+         ) 
+covariates <- c("sex", 
+                "race", 
+                "age", 
+                "age_p2", 
+                "education", 
+                "smokeintensity", 
+                "smokeintensity_p2", 
+                "smokeyrs", 
+                "smokeyrs_p2", 
+                "exercise", 
+                "active", 
+                "wt71", 
+                "wt71_p2")
+nhefs_d1 <- nhefs_complete_ext %>% 
+  lmtp_tmle(trt = "qsmk",
+            outcome = "wt82_71",
+            baseline = covariates,
+            outcome_type = "continuous",
+            shift =  static_binary_on)
+              
+nhefs_d0 <- nhefs_complete_ext %>% 
+  lmtp_tmle(trt = "qsmk",
+            outcome = "wt82_71",
+            baseline = covariates,
+            outcome_type = "continuous",
+            shift =  static_binary_off)
+lmtp_contrast(nhefs_d1, ref = nhefs_d0)
+
+```
+
+The ATE based on TMLE is very close with 3.48 and significant, but not identical.
+
+## Kang & Schafer's Devilish Example
+Now we have a look at simulated data taken from the paper by Kang & Schafer (2007). The outcome is based on 4 normally distributed covariates ``z1, Z2, Z3, z4`` and four deliberately modified version ``x1, x2, x3, x4``, using complex non-linear function while keeping basic correlation roughly intact. the treatment is actually a collider based on the four covariates, so there should be no treatment effect. We see ``TMLE`` completedly fail using the "wrong" predictors. Naive regression fails as well.
+
+Let's have a look at the data.
+
+```{r kang_schafer_basic_descriptive}
+head(kang_schafer)
+#psych::pairs.panels(kang_schafer %>% 
+#                      select(starts_with(c("x", "z"))))
+psych::pairs.panels(kang_schafer %>% 
+                      select(y, t, z1, x1, z2, x2, z3, x3, z4, x4))
+
+```
+
+First, naive modeling.
+
+```{r kang_schafer_naive}
+fit_wrong <- kang_schafer %>% lm(y ~ x1 + x2 + x3 + x4 + t, data = .)  
+summary(fit_wrong)
+
+fit_always_treat_ks <- 
+  fit_wrong %>% 
+    marginaleffects::avg_predictions(
+      newdata = kang_schafer %>% mutate(t = 1))
+fit_never_treat_ks <- 
+  fit_wrong %>% 
+    marginaleffects::avg_predictions(
+      newdata = kang_schafer %>% mutate(t = 0))
+ATE <- fit_always_treat_ks$estimate - fit_never_treat_ks$estimate
+se_ATE <- sqrt(fit_always_treat_ks$std.error^2  + fit_never_treat_ks$std.error^2)
+ci_lo_ATE <- ATE - 1.96 * se_ATE
+ci_hi_ATE <- ATE + 1.96 * se_ATE
+tibble(estimate = ATE, 
+       std.error = se_ATE, 
+       conf.low  = ci_lo_ATE, 
+       conf.high = ci_hi_ATE)
+
+```
+
+Let's see the TMLE models.
+
+```{r kang_schafer}
+ks_z_d1 <- kang_schafer %>% lmtp_tmle(
+  outcome = "y",
+  trt = "t",
+  baseline = sprintf("z%d", 1:4),
+  outcome_type = "continuous",
+  shift = static_binary_on
+)
+  
+ks_z_d0 <- kang_schafer %>% lmtp_tmle(
+  outcome = "y",
+  trt = "t",
+  baseline = sprintf("z%d", 1:4),
+  outcome_type = "continuous",
+  shift = static_binary_off
+)
+
+ks_x_d1 <- kang_schafer %>% lmtp_tmle(
+  outcome = "y",
+  trt = "t",
+  baseline = sprintf("x%d", 1:4),
+  outcome_type = "continuous",
+  shift = static_binary_on
+)
+  
+ks_x_d0 <- kang_schafer %>% lmtp_tmle(
+  outcome = "y",
+  trt = "t",
+  baseline = sprintf("x%d", 1:4),
+  outcome_type = "continuous",
+  shift = static_binary_off
+)
+
+bind_rows(
+  lmtp_contrast(ks_x_d1, ref = ks_x_d0) %>% 
+    pluck("estimates") %>% 
+    as_tibble() %>% 
+    mutate(type = "Wrongly specified"),
+  lmtp_contrast(ks_z_d1, ref = ks_z_d0) %>% 
+    pluck("estimates") %>% 
+    as_tibble() %>% 
+    mutate(type = "Correctly specified"))%>%
+  select(type, everything())
+  
+
+```
+
+We see a complete failure for the misspecified models.

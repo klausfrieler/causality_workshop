@@ -1,7 +1,10 @@
 library(tidyverse)
 library(lmtp)
 source("globals.R")
+source("utils.R")
+
 messagef <- function(...) message(sprintf(...))
+
 default_baseline <-
   c(
     "gender",
@@ -14,7 +17,9 @@ default_baseline <-
     "TPI.openness_to_experiences"
     
   )
+
 all_outcomes <- c(wb_vars, "JAJ.ability", "DER.score", "GDS.urge_to_dance")
+
 filter_gender <- function(data){
   data %>% filter(gender %in% c("female", "male"))
 }
@@ -97,11 +102,13 @@ setup_workspace <- function(){
   assign("foo", simulate_class_trick(seed = global_seed), globalenv())
   assign("sim20", simulate_20_1(l1_effect = 0, mult = 1, seed = global_seed), globalenv())
   assign("sim20_l1", simulate_20_1(l1_effect = -10, mult = 1, seed = global_seed), globalenv())
-  
+  kang_schafer <- simulate_kang_schafer(seed = global_seed)  
+  assign("kang_schafer", kang_schafer, globalenv())
   assign("nhefs_complete", nhefs_complete, globalenv())
   assign("master", master, globalenv())
   assign("master_red", master_red, globalenv())
 }
+
 d1 <- function(data, trt){
   rep("dance", nrow(data))
 }
