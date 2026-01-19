@@ -133,7 +133,7 @@ bind_rows(naive_ttest %>% mutate(estimate = ATE_no_effect),
   select(type, outcome = .y., estimate, cohens_d = effsize, p, everything())
 
 ```
-We see that the simple models give (erroneus) significant effects for always treat vs. never treat
+We see that the simple models give (erroneous) significant effects for always treat vs. never treat
 
 ## Smoking Cessation and Weight Gain
 Recall the data from Ch. 13 to 15 about Smoking cessation and weight gain. The G-Estimation, for example, gave an ATE of 3.44 (without censoring). Can we reproduce this value using TMLE?

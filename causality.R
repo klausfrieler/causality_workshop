@@ -280,7 +280,7 @@ time_varying_fs <- function(outcomes = all_outcomes,
     data <- data %>% 
       left_join(master_red %>% select(all_of(c("gender", "age", "DEG.born_here", "p_id")))) %>% 
       na.omit()
-    naive_fit <- lm(as.formula(sprintf("%s_T4 ~ %s", oc, 
+    naive_fit <- lmerTest::lmer(as.formula(sprintf("%s_T4 ~ %s", oc, 
                                        paste(c(time_vary_wide_1, 
                                                time_vary_wide_2, 
                                                c("gender", "age", "DEG.born_here"), 
