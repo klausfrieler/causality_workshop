@@ -72,8 +72,8 @@ factor_to_num <- function(fac, start = 0){
 }
 
 setup_workspace <- function(){
-  master <- readRDS("data/flying_steps_data.rds")
-  master_red <- master %>% filter_gender()
+  #master <- readRDS("data/flying_steps_data.rds")
+  #master_red <- master %>% filter_gender()
   nhefs <- haven::read_sas("data/nhefs.sas7bdat")
   
   nhefs <- nhefs %>% 
@@ -106,8 +106,8 @@ setup_workspace <- function(){
   kang_schafer <- simulate_kang_schafer(seed = global_seed)  
   assign("kang_schafer", kang_schafer, globalenv())
   assign("nhefs_complete", nhefs_complete, globalenv())
-  assign("master", master, globalenv())
-  assign("master_red", master_red, globalenv())
+  #assign("master", master, globalenv())
+  #assign("master_red", master_red, globalenv())
 }
 
 d1 <- function(data, trt){
@@ -117,7 +117,7 @@ d1 <- function(data, trt){
 d0 <- function(data, trt){
   rep("control", nrow(data))
 }
-causal_effect <- function(data = master_red, 
+fs_causal_effect <- function(data = master_red, 
                           outcome = all_outcomes, 
                           baseline = default_baseline, 
                           trt = "p_group", 

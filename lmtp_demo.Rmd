@@ -266,3 +266,28 @@ bind_rows(
 ```
 
 We see a complete failure for the misspecified models.
+
+### References
+
+
+Díaz, I., Williams, N., Hoffman, K. L., & Schenck, E. J. (2023a). Nonparametric Causal Effects Based on Longitudinal Modified Treatment Policies. Journal of the American Statistical Association, 118(542), 846–857. https://doi.org/10.1080/01621459.2021.1955691
+
+Díaz, I., Williams, N., Hoffman, K. L., & Schenck, E. J. (2023b). Nonparametric Causal Effects Based on Longitudinal Modified Treatment Policies. Journal of the American Statistical Association, 118(542), 846–857. https://doi.org/10.1080/01621459.2021.1955691
+
+Hernán, M., & Robins, J. M. (2023). Causal inference: What if (First edition). Taylor and Francis.
+
+Hines, O., Dukes, O., Diaz-Ordaz, K., & Vansteelandt, S. (2022). Demystifying Statistical Learning Based on Efficient Influence Functions. The American Statistician, 76(3), 292–304. 
+https://doi.org/10.1080/00031305.2021.2021984
+
+Hoffman, K. L., Schenck, E. J., Satlin, M. J., Whalen, W., Pan, D., Williams, N., & Díaz, I. (2022). Comparison of a Target Trial Emulation Framework to Cox Regression to Estimate the Effect of Corticosteroids on COVID-19 Mortality. Intensive Care and Critical Care Medicine. https://doi.org/10.1101/2022.05.27.22275037
+
+Kang, J. D. Y., & Schafer, J. L. (2007). Demystifying Double Robustness: A Comparison of Alternative Strategies for Estimating a Population Mean from Incomplete Data. Statistical Science, 22(4). https://doi.org/10.1214/07-STS227
+
+Muñoz, I. D., & Van Der Laan, M. (2012). Population Intervention Causal Effects Based on Stochastic Interventions. Biometrics, 68(2), 541–549. https://doi.org/10.1111/j.1541-0420.2011.01685.x
+
+Petersen, M. L., & Van Der Laan, M. J. (2014). Causal Models and Learning from Data: Integrating Causal Modeling and Statistical Estimation. Epidemiology, 25(3), 418–426. https://doi.org/10.1097/EDE.0000000000000078
+
+Rubin, D. B. (2005). Causal Inference Using Potential Outcomes: Design, Modeling, Decisions. Journal of the American Statistical Association, 100(469), 322–331. https://doi.org/10.1198/016214504000001880
+
+Williams et al. (2025), Beyond the Average Treatment Effect, [Workshop/Tutorial  https://beyondtheate.com/](https://beyondtheate.com/)
+
