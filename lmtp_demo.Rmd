@@ -53,6 +53,7 @@ sim20_1_l1_d1 <- sim20_l1 %>%
             outcome = "Y2", 
             time_vary = list("L0", "L1"), 
             outcome_type = "continuous", 
+            folds = 1,
             shift = static_binary_on)
 
 sim20_1_l1_d0 <- sim20_l1 %>% 
@@ -61,6 +62,7 @@ sim20_1_l1_d0 <- sim20_l1 %>%
             outcome = "Y2",
             time_vary = list("L0", "L1"), 
             outcome_type = "continuous", 
+            folds = 1,
             shift = static_binary_off)
 
 lmtp_contrast(sim20_1_l1_d1, ref = sim20_1_l1_d0, type = "additive")
