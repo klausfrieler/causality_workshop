@@ -205,3 +205,9 @@ simulate_kang_schafer <- function(n = 200, seed = global_seed){
                  y_pred_wrong = y_model_x)
 }
 
+simulate_neuron <- function(n_input = 10, n = 200){
+  ret <- map_dfr(1:n_input, function(i){
+    tibble(i_id = i, s_id = 1:n, x =  rnorm(n, 0, 1), w = rnorm(n, 0, 1))  
+  })  
+  ret
+}
