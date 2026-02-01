@@ -80,7 +80,7 @@ setup_workspace <- function(){
     mutate(
       # add id and censored indicator
       id = 1:n(),
-      censored = ifelse(is.na(wt82), 1, 0),
+      censored = ifelse(is.na(wt82), 0, 1),
       # recode age > 50 and years of school to categories
       older = case_when(
         is.na(age) ~ NA_real_,
