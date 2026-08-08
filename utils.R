@@ -186,7 +186,7 @@ simulate_kang_schafer <- function(n = 200, seed = global_seed){
   z3 <- rnorm(n, 0, 1)
   z4 <- rnorm(n, 0, 1)
   
-  y <- 210 + 27.4*z1 + 13.7*z2 + 13.7 * z3 + 13.7 * z4 + rnorm(n, 0, 1)
+  y <- 210 + 27.4 * z1 + 13.7 * z2 + 13.7 * z3 + 13.7 * z4 + rnorm(n, 0, 1)
   pi <- expit(- z1 + 0.5 * z2 - 0.25 * z3 - 0.1 * z4 + rnorm(n, 0, 1))
   x1 <- exp(z1/2)
   x2 <- z2/(1 + exp(z1)) + 10
@@ -204,4 +204,19 @@ simulate_kang_schafer <- function(n = 200, seed = global_seed){
                  y_pred_correct = y_model_z, 
                  y_pred_wrong = y_model_x)
 }
-
+simulate_simple_example <- function(n = 1000, seed = global_seed, threshold = .1){
+  set.seed(global_seed)
+  simdat <- tibble(l1 = rnorm(n, 10, 5))
+  a.lin <- simdat$l1 - 10
+  b.lin <- rnorm(n, 10, 10)
+  browser()
+  pa <- exp(a.lin + b.lin)/(1 + exp(a.lin + b.lin))
+  simdat$a <- rbinom(n, 1, prob = pa)
+  simdat$y <- 10 * simdat$a + 2 * simdat$l1 + rnorm(n, -10, 5)
+  simdat$l2 <- b.lin
+  shuffle_idx <- which(runif(nrow(simdat)) > (1 - threshold))
+  simdat$t <- simdat$a
+  simdat$a[shuffle_idx] <- sample(c(0, 1), length(shuffle_idx), replace = T)
+  #simdat$a[abs(b.lin-20) > ] <- sample(c(0, 1), length(shuffle_idx), replace = T)
+  simdat
+}

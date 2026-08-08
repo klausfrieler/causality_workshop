@@ -357,3 +357,145 @@ plot_ATE_cmp <- function(cmp){
   }
   q
 }
+t_quick <- function(data, target_var = "MIQ.score"){
+  d <- data %>% 
+    group_by(CCM) %>% 
+    summarise(m = mean(!!sym(target_var))) %>% 
+    pull(m) %>% 
+    diff()
+  
+  data <- data %>% 
+    select(all_of(target_var), CCM) %>% 
+    na.omit()
+  
+  form <- as.formula(sprintf("%s ~ CCM", target_var))
+  
+  bind_cols(data  %>% 
+              rstatix::cohens_d(form) %>% 
+              select(cohens_d = effsize) %>% 
+              mutate(cohens_d = -cohens_d), 
+            tibble(estimate = d), 
+             data %>% 
+              rstatix::t_test(form) %>% 
+              select(p.value = p))
+}
+
+longgold_tmle_demo <- function(target_var = "MIQ.score", data = NULL){
+  library(longgoldstandard)
+  if(is.null(data)){
+    tmp <- tmp %>% 
+      lg_prepare()
+  }
+  else{
+    tmp <- data
+  }
+  tmp <-  tmp %>% 
+    mutate(CCM = as.integer(CCM > 0))
+  baseline <- c("SES.educational_degree", "GMS.musical_training", "age","gender",  "MHE.general_score", "country") 
+  
+  tmp <- tmp %>% filter(gender %in% c("Male", "Female")) %>%
+    select(CCM, all_of(target_var), 
+           all_of(baseline),
+           age_group) %>% 
+    na.omit()
+  age_groups <- levels(tmp$age_group)[2:6]
+  
+  ATEs <- map_dfr(age_groups, function(ag){
+    messagef("Testing age group %s", ag)
+    #if(ag == "14_15"){browser()}
+    tmp2 <- tmp %>% filter(age_group == ag)
+    fit1 <- lmtp_tmle(tmp2, 
+                      trt = "CCM", 
+                      outcome = target_var, 
+                      baseline = baseline,
+                      shift = static_binary_on, 
+                      outcome_type = "continuous")
+    
+    fit0 <- lmtp_tmle(tmp2, 
+                      trt = "CCM", 
+                      outcome = target_var, 
+                      baseline = baseline,
+                      shift = static_binary_off, 
+                      outcome_type = "continuous")
+    
+    tlme_ATE <- lmtp_contrast(fit1, ref = fit0)$estimates %>% 
+      mutate(type = "tlme") %>% 
+      select(-c(conf.low, conf.high))
+    
+    form <- as.formula(sprintf("%s ~ .", target_var))
+    lm_ATE <- tmp2 %>% 
+      select(-age_group) %>% 
+      lm(form, data = .) %>% 
+      broom::tidy() %>%
+      filter(term == "CCM") %>%
+      mutate(type = "lm")
+    
+    t_test_ATE <- t_quick(tmp2, target_var = target_var) %>% 
+      mutate(type = "t_test") 
+    
+    bind_rows(tlme_ATE, lm_ATE, t_test_ATE) %>% 
+      select(-c(term, statistic)) %>% 
+      mutate(outcome = target_var, age_group = ag, n = nrow(tmp2))
+    })
+  ATEs
+}
+
+longgold_tmle_demo2 <- function(target_var = "MIQ.score", data = NULL){
+  library(longgoldstandard)
+  if(is.null(data)){
+    tmp <- tmp %>% 
+      lg_prepare()
+  }
+  else{
+    tmp <- data
+  }
+  tmp <-  tmp %>% 
+    mutate(CCM = as.integer(CCM > 0))
+  baseline <- c("SES.educational_degree", "GMS.musical_training", "gender",  "MHE.general_score", "country") 
+  
+  tmp <- tmp %>% filter(gender %in% c("Male", "Female")) %>%
+    select(CCM, all_of(target_var), 
+           all_of(baseline),
+           age) %>% 
+    na.omit()
+  ages <- 11:16
+  
+  ATEs <- map_dfr(ages, function(ag){
+    messagef("Testing age  %s", ag)
+    #if(ag == "14_15"){browser()}
+    tmp2 <- tmp %>% filter(age == ag)
+    fit1 <- lmtp_tmle(tmp2, 
+                      trt = "CCM", 
+                      outcome = target_var, 
+                      baseline = baseline,
+                      shift = static_binary_on, 
+                      outcome_type = "continuous")
+    
+    fit0 <- lmtp_tmle(tmp2, 
+                      trt = "CCM", 
+                      outcome = target_var, 
+                      baseline = baseline,
+                      shift = static_binary_off, 
+                      outcome_type = "continuous")
+    
+    tlme_ATE <- lmtp_contrast(fit1, ref = fit0)$estimates %>% 
+      mutate(type = "tlme") %>% 
+      select(-c(conf.low, conf.high))
+    
+    form <- as.formula(sprintf("%s ~ .", target_var))
+    lm_ATE <- tmp2 %>% 
+      select(-age) %>% 
+      lm(form, data = .) %>% 
+      broom::tidy() %>%
+      filter(term == "CCM") %>%
+      mutate(type = "lm")
+    
+    t_test_ATE <- t_quick(tmp2, target_var = target_var) %>% 
+      mutate(type = "t_test") 
+    
+    bind_rows(tlme_ATE, lm_ATE, t_test_ATE) %>% 
+      select(-c(term, statistic)) %>% 
+      mutate(outcome = target_var, age = ag, n = nrow(tmp2))
+  })
+  ATEs
+}
