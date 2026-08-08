@@ -220,3 +220,10 @@ simulate_simple_example <- function(n = 1000, seed = global_seed, threshold = .1
   #simdat$a[abs(b.lin-20) > ] <- sample(c(0, 1), length(shuffle_idx), replace = T)
   simdat
 }
+
+simulate_neuron <- function(n_input = 10, n = 200){
+  ret <- map_dfr(1:n_input, function(i){
+    tibble(i_id = i, s_id = 1:n, x =  rnorm(n, 0, 1), w = rnorm(n, 0, 1))  
+  })  
+  ret
+}
