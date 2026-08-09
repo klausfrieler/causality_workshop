@@ -1,3 +1,4 @@
+library(tidyverse)
 global_seed <- 786543
 
 simulate_class_trick  <- function(n = 1000, seed = NULL) {
@@ -209,7 +210,6 @@ simulate_simple_example <- function(n = 1000, seed = global_seed, threshold = .1
   simdat <- tibble(l1 = rnorm(n, 10, 5))
   a.lin <- simdat$l1 - 10
   b.lin <- rnorm(n, 10, 10)
-  browser()
   pa <- exp(a.lin + b.lin)/(1 + exp(a.lin + b.lin))
   simdat$a <- rbinom(n, 1, prob = pa)
   simdat$y <- 10 * simdat$a + 2 * simdat$l1 + rnorm(n, -10, 5)
@@ -218,7 +218,9 @@ simulate_simple_example <- function(n = 1000, seed = global_seed, threshold = .1
   simdat$t <- simdat$a
   simdat$a[shuffle_idx] <- sample(c(0, 1), length(shuffle_idx), replace = T)
   #simdat$a[abs(b.lin-20) > ] <- sample(c(0, 1), length(shuffle_idx), replace = T)
-  simdat
+  simdat$r <- sample(c(0,1), nrow(simdat), replace = T)
+  simdat$id <- 1:nrow(simdat)
+  simdat %>% mutate(z = scale((y + l1 * l2))[,1]+ rnorm(nrow(simdat), 10, 1))
 }
 
 simulate_neuron <- function(n_input = 10, n = 200){

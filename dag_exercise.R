@@ -1,6 +1,9 @@
 library(dagitty)
 library(ggdag)
 library(ggplot2)
+library(MatchIt)
+library(ipw)
+library(marginaleffects)
 
 backdoor_example <- function(){
   example_dag <- dagitty('dag{
@@ -47,3 +50,14 @@ longgold_dag_example <- function(){
     labs(title = "Corrected Causal Model (Parental SES Exogenous)")
   
 } 
+
+simple_dag <- dagitty('dag{
+l1 -> y <- l2
+t -> y
+l1 -> t
+a -> y
+t -> a
+l1 -> y
+l1 -> z <- y
+l2 -> z
+}')
