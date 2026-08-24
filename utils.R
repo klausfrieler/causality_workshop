@@ -205,24 +205,6 @@ simulate_kang_schafer <- function(n = 200, seed = global_seed){
                  y_pred_correct = y_model_z, 
                  y_pred_wrong = y_model_x)
 }
-simulate_simple_example <- function(n = 1000, seed = global_seed, threshold = .1){
-  set.seed(global_seed)
-  simdat <- tibble(l1 = rnorm(n, 10, 5))
-  a.lin <- simdat$l1 - 10
-  b.lin <- rnorm(n, 10, 10)
-  pa <- exp(a.lin + b.lin)/(1 + exp(a.lin + b.lin))
-  simdat$a <- rbinom(n, 1, prob = pa)
-  simdat$y <- 10 * simdat$a + 2 * simdat$l1 + rnorm(n, -10, 5)
-  simdat$l2 <- b.lin
-  shuffle_idx <- which(runif(nrow(simdat)) > (1 - threshold))
-  simdat$t <- simdat$a
-  simdat$a[shuffle_idx] <- sample(c(0, 1), length(shuffle_idx), replace = T)
-  #simdat$a[abs(b.lin-20) > ] <- sample(c(0, 1), length(shuffle_idx), replace = T)
-  simdat$r <- sample(c(0,1), nrow(simdat), replace = T)
-  simdat$id <- 1:nrow(simdat)
-  simdat %>% mutate(z = scale((y + l1 * l2))[,1]+ rnorm(nrow(simdat), 10, 1))
-}
-
 simulate_neuron <- function(n_input = 10, n = 200){
   ret <- map_dfr(1:n_input, function(i){
     tibble(i_id = i, s_id = 1:n, x =  rnorm(n, 0, 1), w = rnorm(n, 0, 1))  

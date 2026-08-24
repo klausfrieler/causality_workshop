@@ -1,0 +1,188 @@
+---
+title: "causality_demo"
+author: "Klaus Frieler"
+date: "2026-08-11"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+source("dag_exercise.R")
+simple <- simulate_simple_example()
+```
+
+## A contrived example
+
+We simulated a data set based on the following DAG.
+```{r simple_data_step1}
+ggdag(simple_dag_step1, layout = "time_ordered") +
+  theme_dag()   +
+  labs(title = "Contrived Example")
+
+
+```
+
+We simulated an observational experiment with a treatment t (0, 1, e.g,  "playing music last week") and an continuous outcome y (e.g., IQ). We have some data for it. What is the Average Treatment Effect? 
+
+```{r simple_data_step1}
+
+simple %>%  select(t, y) %>% psych::pairs.panels() 
+#simple %>% with(., table(t))
+simple %>% boxplot( y ~ t, data = .)
+simple %>% group_by(t) %>% summarise(m = mean(y))
+simple %>% 
+  rstatix::t_test( y ~ t) %>% select(-c(group1, group2)) %>% 
+  bind_cols(simple %>% 
+  rstatix::cohens_d( y ~ t) %>% select(effsize) 
+)
+
+```
+Great, a really strong effect. But we know and measured two covariates that might influence the outcome as well (e.g., SES, Working Memory)
+
+```{r simple_data_step2}
+ggdag(simple_dag_step2, layout = "time_ordered") +
+  theme_dag()   +
+  labs(title = "Contrived Example")
+
+
+```
+
+```{r simple_data_reg_cov}
+
+simple %>% lm(y ~ t + l1 + l2, data = .) %>% summary()
+  
+
+```
+
+So, this was successful, the effect size was halfed with ATE = 9.65. But actually, we might tend to think, that the treatment is also affected by the covariates. Can we predict "treatment" from covariates?
+
+```{r treatment_model}
+
+ps_mod <- simple %>% glm(t ~ l1 + l2, family = "binomial", data = .) 
+sjPlot::tab_model(ps_mod)
+ps_mod %>% summary()
+ps_mod %>% performance::r2_tjur()
+
+```
+This seems to be the case. Let's try some propensity score weighting.
+
+```{r prop_scores}
+ps <- ps_mod %>% predict(type = "response")
+hist(ps)
+as.integer(ps > .5) %>% table()
+table(simple$t)
+```
+
+Let's try IPW  regression using propensity score, without covariates.
+
+```{r simple_data_reg_prop}
+
+simple_ext <- simple %>% group_by(t) %>% 
+  mutate(rel_f = n()/nrow(.)) %>%
+  ungroup() %>% 
+  mutate(weights = t * ps + (1 -t) * (1 - ps), 
+         stab_weights = rel_f * (t * ps + (1 -t) * (1 - ps)))
+         
+simple_ext$weights %>% hist()
+ipw_prop1 <- simple_ext %>% 
+           lm(y ~ t, weights = weights, data = .) %>% summary()
+ipw_prop1  
+ipw_prop2 <- simple_ext %>% 
+           lm(y ~ t, weights = stab_weights, data = .) %>% summary()
+ipw_prop2  
+
+```
+
+So, this didn't work. Let's add covariates
+
+```{r simple_data_reg_prop}
+
+ipw_prop3 <- simple_ext %>% 
+           lm(y ~ t + l1 + l2, weights = weights, data = .) %>% summary()
+ipw_prop3
+```
+Not so much changes.
+
+Let's try matching, "full" and then CEM.
+
+```{r simple_data_reg_match}
+  match_full <- simple %>% 
+    MatchIt::matchit(t ~ l1 + l2, method = "full", 
+                     distance = "glm", 
+                     link = "logit", data  =.) 
+
+  match_cem <- simple %>% 
+    MatchIt::matchit(t ~ l1 + l2, 
+                     method = "cem", data  =.)
+  simple_full <- match_data(match_full)
+  simple_cem <- match_data(match_cem)
+  fit_full <- simple_full %>% 
+    lm(y ~ t + l1 + l2, 
+       weights = weights, 
+       data = .)
+  
+  fit_full0 <- simple_full %>% 
+    lm(y ~ t, 
+       weights = weights, 
+       data = .)
+  fit_cem <- simple_cem %>% 
+    lm(y ~ t + l1 + l2, 
+       weights = weights, 
+       data = .)
+  
+  fit_cem0 <- simple_cem %>% 
+    lm(y ~ t, 
+       weights = weights, 
+       data = .)
+sjPlot::plot_models(fit_cem, fit_cem0, fit_full, fit_full0, lm(y ~t, data = simple), m.labels = c("CEM", "CEM0", "FULL", "FULL0", "NAIVE"))
+```
+Finally, let's try TMLE.
+
+```{r simple_data_reg_tmle}
+mod1 <- simple %>%
+  lmtp_tmle(
+    trt = "t",
+    outcome = "y",
+    outcome_type = "continuous",
+    baseline = c("l1", "l2"),
+    shift = static_binary_on
+  )
+mod0 <- simple %>% lmtp_tmle(
+  trt = "t",
+  outcome = "y",
+  outcome_type = "continuous",
+  baseline = c("l1", "l2"),
+  shift = static_binary_off
+)
+lmtp_contrast(mod1, ref = mod0)
+
+```
+
+So what is the truth?
+
+```{r simple_data_reg_tmle}
+simulate_simple_example <- function(n = 1000, 
+                                    seed = global_seed, 
+                                    threshold = .1, 
+                                    cov_rel = 0){
+  set.seed(global_seed)
+  simdat <- tibble(l1 = rnorm(n, 10, 5))
+  a.lin <- simdat$l1 - 10
+  b.lin <- rnorm(n, 2, 5)
+  c.lin <- rnorm(n, 1, 5)
+  pa <- exp(a.lin + b.lin + c.lin)/(1 + exp(a.lin + b.lin + c.lin))
+  simdat$a <- rbinom(n, 1, prob = pa)
+  simdat$r <- sample(c(-1,1), nrow(simdat), replace = T)
+  simdat$y <- 10 * simdat$a + 2 * simdat$l1 + rnorm(n, -10, 5)
+  simdat$l1_me <- simdat$l1 + rnorm(n, 0, cov_rel) 
+  simdat$l2 <- b.lin  
+  simdat$l2_me <- b.lin + rnorm(n, 0, cov_rel) 
+  shuffle_idx <- which(runif(nrow(simdat)) > (1 - threshold))
+  simdat$t <- simdat$a
+  simdat$a[shuffle_idx] <- sample(c(0, 1), length(shuffle_idx), replace = T)
+  #simdat$a[abs(b.lin-20) > ] <- sample(c(0, 1), length(shuffle_idx), replace = T)
+  simdat$id <- 1:nrow(simdat)
+  simdat %>% mutate(z = scale((y + l1 * l2))[,1]+ rnorm(nrow(simdat), 10, 1))
+}
+```
+

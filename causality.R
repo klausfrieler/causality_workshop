@@ -418,8 +418,8 @@ longgold_tmle_demo <- function(target_var = "MIQ.score", data = NULL){
                       shift = static_binary_off, 
                       outcome_type = "continuous")
     
-    tlme_ATE <- lmtp_contrast(fit1, ref = fit0)$estimates %>% 
-      mutate(type = "tlme") %>% 
+    tmle_ATE <- lmtp_contrast(fit1, ref = fit0)$estimates %>% 
+      mutate(type = "tmle") %>% 
       select(-c(conf.low, conf.high))
     
     form <- as.formula(sprintf("%s ~ .", target_var))
@@ -433,7 +433,7 @@ longgold_tmle_demo <- function(target_var = "MIQ.score", data = NULL){
     t_test_ATE <- t_quick(tmp2, target_var = target_var) %>% 
       mutate(type = "t_test") 
     
-    bind_rows(tlme_ATE, lm_ATE, t_test_ATE) %>% 
+    bind_rows(tmle_ATE, lm_ATE, t_test_ATE) %>% 
       select(-c(term, statistic)) %>% 
       mutate(outcome = target_var, age_group = ag, n = nrow(tmp2))
     })
@@ -478,8 +478,8 @@ longgold_tmle_demo2 <- function(target_var = "MIQ.score", data = NULL){
                       shift = static_binary_off, 
                       outcome_type = "continuous")
     
-    tlme_ATE <- lmtp_contrast(fit1, ref = fit0)$estimates %>% 
-      mutate(type = "tlme") %>% 
+    tmle_ATE <- lmtp_contrast(fit1, ref = fit0)$estimates %>% 
+      mutate(type = "tmle") %>% 
       select(-c(conf.low, conf.high))
     
     form <- as.formula(sprintf("%s ~ .", target_var))
@@ -493,7 +493,7 @@ longgold_tmle_demo2 <- function(target_var = "MIQ.score", data = NULL){
     t_test_ATE <- t_quick(tmp2, target_var = target_var) %>% 
       mutate(type = "t_test") 
     
-    bind_rows(tlme_ATE, lm_ATE, t_test_ATE) %>% 
+    bind_rows(tmle_ATE, lm_ATE, t_test_ATE) %>% 
       select(-c(term, statistic)) %>% 
       mutate(outcome = target_var, age = ag, n = nrow(tmp2))
   })

@@ -18,7 +18,7 @@ setup_workspace()
 
 ## Motivating Example from Ch. 20
 
-First we sue TLME on the motivating example 20.1 from Ch. 20, without and with an additional L1 effect, added by us. 
+First we sue TMLE on the motivating example 20.1 from Ch. 20, without and with an additional L1 effect, added by us. 
 
 ### Original data
 
