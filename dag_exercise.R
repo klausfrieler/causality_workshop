@@ -145,24 +145,47 @@ simulate_simple_example <- function(n = 1000,
                                     seed = global_seed, 
                                     threshold = .1, 
                                     cov_rel = 0){
-  set.seed(global_seed)
+  set.seed(seed)
   simdat <- tibble(l1 = rnorm(n, 10, 5))
+  
+  #use some normal distribution to defined treatment
   a.lin <- simdat$l1 - 10
   b.lin <- rnorm(n, 2, 5)
+  
+  #c.lin will be unobserved
   c.lin <- rnorm(n, 1, 5)
+  
+  #logistic experssion to defone probality to be treated 
   pa <- exp(a.lin + b.lin + c.lin)/(1 + exp(a.lin + b.lin + c.lin))
-  simdat$a <- rbinom(n, 1, prob = pa)
+  
+  #simulate binary treatment based on probability to treat, which in turn is based on 2 obversed and on unobserved covariate
+  simdat$t <- rbinom(n, 1, prob = pa)
+  
+  #add reandom treatment for whatever reasons
   simdat$r <- sample(c(-1,1), nrow(simdat), replace = T)
-  simdat$y <- 10 * simdat$a + 2 * simdat$l1 + rnorm(n, -10, 5)
+  
+  #outcome
+  simdat$y <- 10 * simdat$t + 2 * simdat$l1 + rnorm(n, -10, 5)
+  
+  #Covariate l1 with measurement error based on cov_rel (covariate reliability)
   simdat$l1_me <- simdat$l1 + rnorm(n, 0, cov_rel) 
+  
+  #covariate l2
   simdat$l2 <- b.lin  
+
+  #Covariate l2 with measurement error, based on cov_rel)
   simdat$l2_me <- b.lin + rnorm(n, 0, cov_rel) 
+  
+  #change threshold/2 percents of treatments  
   shuffle_idx <- which(runif(nrow(simdat)) > (1 - threshold))
-  simdat$t <- simdat$a
-  simdat$a[shuffle_idx] <- sample(c(0, 1), length(shuffle_idx), replace = T)
-  #simdat$a[abs(b.lin-20) > ] <- sample(c(0, 1), length(shuffle_idx), replace = T)
+  simdat$t_me <- simdat$t
+  simdat$t_me[shuffle_idx] <- sample(c(0, 1), length(shuffle_idx), replace = T)
+  
+  #add a collider, for education purposes
+  simdat <- simdat %>% mutate(z = scale((y + l1 * l2))[,1] + rnorm(nrow(simdat), 10, 1))
+  #add ids for completeness
   simdat$id <- 1:nrow(simdat)
-  simdat %>% mutate(z = scale((y + l1 * l2))[,1]+ rnorm(nrow(simdat), 10, 1))
+  simdat
 }
 
 
@@ -196,23 +219,23 @@ comp_ATE_simple_dags <- function(with_measurement_error = F,
     simple <- data
   }  
   fit0 <- simple %>% lm(y ~ t, data =.)
-  fit0_a <- simple %>% lm(y ~ a, data =.)
+  fit0_a <- simple %>% lm(y ~ t_me, data =.)
   fit1 <- simple %>% lm(y ~ t + l1 + l2, data =.)
-  fit1_a <- simple %>% lm(y ~ a + l1 + l2, data =.)
+  fit1_a <- simple %>% lm(y ~ t_me + l1 + l2, data =.)
   fit1_z_cov <- simple %>% lm(y ~ t + l1 + l2 + z, data =.)
   fit1_z <- simple %>% lm(y ~ t + z + l2, data =.)
   ret <- bind_rows(
     prepare_fit_data(fit0) %>% mutate(method = "none", spec = "no covariates", trt = "clean"),
-    prepare_fit_data(fit0_a, "a") %>% mutate(method = "none", spec = "no covariates", trt ="noisy"),
+    prepare_fit_data(fit0_a, "t_me") %>% mutate(method = "none", spec = "no covariates", trt ="noisy"),
     prepare_fit_data(fit1) %>% mutate(method = "none", spec = "covariates", trt = "clean"),
-    prepare_fit_data(fit1_a, "a") %>% mutate(method = "none", spec = "covariates", trt = "noisy"),
+    prepare_fit_data(fit1_a, "t_me") %>% mutate(method = "none", spec = "covariates", trt = "noisy"),
     prepare_fit_data(fit1_z) %>% mutate(method = "none", spec = "covariates + collider", trt = "clean"),
     prepare_fit_data(fit1_z_cov) %>% mutate(method = "none", spec = "wrong covariates", trt = "clean"),
   ) %>% mutate(weights = "none")
   tmle <- simple_tmle(simple)
   tmle_z <- simple_tmle(simple, baseline = c("z", "l2"))
-  tmle_a <- simple_tmle(simple, trt = "a", baseline = c("l1", "l2"))
-  tmle_a_z <- simple_tmle(simple, trt = "a", baseline = c("l1", "l2", "z"))
+  tmle_a <- simple_tmle(simple, trt = "t_me", baseline = c("l1", "l2"))
+  tmle_a_z <- simple_tmle(simple, trt = "t_me", baseline = c("l1", "l2", "z"))
   ret <- ret %>% bind_rows(
     tmle$estimates %>% mutate(method = "tmle" , spec = "covariates", trt = "clean")%>% mutate(weights = "tmle"),
     tmle_a$estimates %>% mutate(method = "tmle" , spec = "covariates", trt = "noisy")%>% mutate(weights = "tmle"),
@@ -242,6 +265,7 @@ comp_ATE_simple_dags <- function(with_measurement_error = F,
   fit_full1 <- simple_full %>% 
     lm(y ~ t + l1 + l2, 
        data = .)
+  
   fit_full1_w <- simple_full %>% 
     lm(y ~ t + l1 + l2, 
        weights = weights, 
@@ -251,13 +275,16 @@ comp_ATE_simple_dags <- function(with_measurement_error = F,
     lm(y ~ t, 
        weights = weights, 
        data = .)
+  
   fit_full1_z <- simple_full_z %>% 
     lm(y ~ t + z + l2, 
        data = .)
+  
   fit_full1_z_w <- simple_full %>% 
     lm(y ~ t + z + l2, 
        weights = weights, 
        data = .)
+  
   fit_full1_coll <- simple_full_z %>% 
     lm(y ~ t + l1 + l2 + z, 
        data = .)
@@ -274,20 +301,25 @@ comp_ATE_simple_dags <- function(with_measurement_error = F,
     lm(y ~ t, 
        weights = weights, 
        data = .)
+  
   fit_cem1 <- simple_cem %>% 
     lm(y ~ t + l1 + l2, 
        data = .)
+  
   fit_cem1_w <- simple_cem %>% 
     lm(y ~ t + l1 + l2, 
        weights = weights, 
        data = .)
+  
   fit_cem1_z <- simple_cem %>% 
     lm(y ~ t + z + l2, 
        data = .)
+  
   fit_cem1_z_w <- simple_cem_z %>% 
     lm(y ~ t + z + l2, 
        weights = weights, 
        data = .)
+  
   ret <- ret %>% bind_rows(
     prepare_fit_data(fit_cem1) %>% mutate(method  = "CEM matching", spec  = "covariates", weights ="none", trt = "clean"),
     prepare_fit_data(fit_cem1_w) %>% mutate(method = "CEM matching", spec  = "covariates", weights ="IPW", trt = "clean"),
