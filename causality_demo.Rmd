@@ -8,13 +8,14 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 source("dag_exercise.R")
+global_seed <- 786543 
 simple <- simulate_simple_example()
 ```
 
 ## A contrived example
 
 We simulated a data set based on the following DAG.
-```{r simple_data_step1}
+```{r simple_data_step_dag}
 ggdag(simple_dag_step1, layout = "time_ordered") +
   theme_dag()   +
   labs(title = "Contrived Example")
@@ -95,7 +96,7 @@ ipw_prop2
 
 So, this didn't work. Let's add covariates
 
-```{r simple_data_reg_prop}
+```{r simple_data_reg_prop_cov}
 
 ipw_prop3 <- simple_ext %>% 
            lm(y ~ t + l1 + l2, weights = weights, data = .) %>% summary()
@@ -158,31 +159,83 @@ lmtp_contrast(mod1, ref = mod0)
 
 ```
 
-So what is the truth?
+So what is the truth? Here is the code to generate the simulated data. The true ATE is 10.
 
-```{r simple_data_reg_tmle}
+<pre><code>
 simulate_simple_example <- function(n = 1000, 
                                     seed = global_seed, 
                                     threshold = .1, 
                                     cov_rel = 0){
-  set.seed(global_seed)
+  set.seed(seed)
   simdat <- tibble(l1 = rnorm(n, 10, 5))
+  
+  #use some normal distribution to defined treatment
   a.lin <- simdat$l1 - 10
   b.lin <- rnorm(n, 2, 5)
+  
+  #c.lin will be unobserved
   c.lin <- rnorm(n, 1, 5)
+  
+  #logistic experssion to defone probality to be treated 
   pa <- exp(a.lin + b.lin + c.lin)/(1 + exp(a.lin + b.lin + c.lin))
-  simdat$a <- rbinom(n, 1, prob = pa)
+  
+  #simulate binary treatment based on probability to treat, which in turn is based on 2 obversed and on unobserved covariate
+  simdat$t <- rbinom(n, 1, prob = pa)
+  
+  #add reandom treatment for whatever reasons
   simdat$r <- sample(c(-1,1), nrow(simdat), replace = T)
-  simdat$y <- 10 * simdat$a + 2 * simdat$l1 + rnorm(n, -10, 5)
+  
+  #outcome
+  simdat$y <- 10 * simdat$t + 2 * simdat$l1 + rnorm(n, -10, 5)
+  
+  #Covariate l1 with measurement error based on cov_rel (covariate reliability)
   simdat$l1_me <- simdat$l1 + rnorm(n, 0, cov_rel) 
+  
+  #covariate l2
   simdat$l2 <- b.lin  
-  simdat$l2_me <- b.lin + rnorm(n, 0, cov_rel) 
-  shuffle_idx <- which(runif(nrow(simdat)) > (1 - threshold))
-  simdat$t <- simdat$a
-  simdat$a[shuffle_idx] <- sample(c(0, 1), length(shuffle_idx), replace = T)
-  #simdat$a[abs(b.lin-20) > ] <- sample(c(0, 1), length(shuffle_idx), replace = T)
-  simdat$id <- 1:nrow(simdat)
-  simdat %>% mutate(z = scale((y + l1 * l2))[,1]+ rnorm(nrow(simdat), 10, 1))
-}
-```
 
+  #Covariate l2 with measurement error, based on cov_rel)
+  simdat$l2_me <- b.lin + rnorm(n, 0, cov_rel) 
+  
+  #change threshold/2 percents of treatments  
+  shuffle_idx <- which(runif(nrow(simdat)) > (1 - threshold))
+  simdat$t_me <- simdat$t
+  simdat$t_me[shuffle_idx] <- sample(c(0, 1), length(shuffle_idx), replace = T)
+  
+  #add a collider, for education purposes
+  simdat <- simdat %>% mutate(z = scale((y + l1 * l2))[,1] + rnorm(nrow(simdat), 10, 1))
+  #add ids for completeness
+  simdat$id <- 1:nrow(simdat)
+  simdat
+}
+
+</code></pre>
+`
+
+This includes also some more variables, i.e., measurement error for treatment `t_me`, for covaviates `l1_me`, `l2_me' as well as a collider `z` depending on `y`, `l1` and `l2`.
+
+Let's try different estimations methods for different combinations of theses variables and compare. We used clean (trt = `clean`) or noisy treatment (about `5%` wrong treatments, trt = `noisy`), with or without measurement error for `l1` and `l2` (with_measurement error `none`or `some`), and the following methods 
+
+  * simple linear regression (method = `none`)
+  * tmle (method = `tmle`)
+  * full matching fromt the `matchIt` package (method = `fuil matching`) with or without weights (weights = `none` or weights = `IPW`)
+  * Coarsend Exact Matching (CEM) from the `matchIt` package (method = `CEM`) with or without weights (weights = `none` or weights = `IPW`)
+
+with the following model variants
+
+  * covariates `l1`and `l2` (spec = `covariates`)
+  * wrong covariates `z` and `l2` (spec = `wrong covariates`)
+  * covariates `l1`, `l2`and collider `z` (spec = `covariates + collider`)
+
+`ref` is the mean in the non-treated group, and `shift` is the mean in the treated group, either raw means or as estimated by the `lmtp_tmle` function. `ATE`is the estimated average treatment effect.
+
+```{r simple_data_ATE_comp}
+comp_ATE_raw <- comp_ATE_simple_dags(with_measurement_error = F, data = simple)
+comp_ATE_me <- comp_ATE_simple_dags(with_measurement_error = T, data = simple)
+comp_ATE <- bind_rows(comp_ATE_raw, comp_ATE_me) %>% 
+  rename(ATE = estimate) %>% mutate(difference = ATE - 10)  %>% 
+  select(ATE, difference, ref, shift, trt, measurement_error = with_measurement_error, 
+         method, spec, trt, weights, everything())  
+
+comp_ATE %>%   arrange(abs(difference)) %>% sjPlot::tab_df()
+``` 

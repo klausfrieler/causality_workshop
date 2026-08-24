@@ -190,6 +190,7 @@ simulate_simple_example <- function(n = 1000,
 
 
 prepare_fit_data <- function(fit, trt = "t"){
+  #browser()
   ret <- fit %>% 
     broom::tidy() %>%
     filter(term == trt) %>% 
@@ -216,7 +217,13 @@ comp_ATE_simple_dags <- function(with_measurement_error = F,
     }
   } 
   else{
-    simple <- data
+    if(!with_measurement_error){
+      simple <- data
+    }
+    else{
+      simple <- simple %>% mutate(l1 = l1_me, l2 = l2_me)
+    }
+
   }  
   fit0 <- simple %>% lm(y ~ t, data =.)
   fit0_a <- simple %>% lm(y ~ t_me, data =.)
@@ -229,12 +236,12 @@ comp_ATE_simple_dags <- function(with_measurement_error = F,
     prepare_fit_data(fit0_a, "t_me") %>% mutate(method = "none", spec = "no covariates", trt ="noisy"),
     prepare_fit_data(fit1) %>% mutate(method = "none", spec = "covariates", trt = "clean"),
     prepare_fit_data(fit1_a, "t_me") %>% mutate(method = "none", spec = "covariates", trt = "noisy"),
-    prepare_fit_data(fit1_z) %>% mutate(method = "none", spec = "covariates + collider", trt = "clean"),
-    prepare_fit_data(fit1_z_cov) %>% mutate(method = "none", spec = "wrong covariates", trt = "clean"),
+    prepare_fit_data(fit1_z) %>% mutate(method = "none", spec = "wrong covariates", trt = "clean"),
+    prepare_fit_data(fit1_z_cov) %>% mutate(method = "none", spec = "covariates + collider", trt = "clean"),
   ) %>% mutate(weights = "none")
   tmle <- simple_tmle(simple)
-  tmle_z <- simple_tmle(simple, baseline = c("z", "l2"))
   tmle_a <- simple_tmle(simple, trt = "t_me", baseline = c("l1", "l2"))
+  tmle_z <- simple_tmle(simple, baseline = c("z", "l2"))
   tmle_a_z <- simple_tmle(simple, trt = "t_me", baseline = c("l1", "l2", "z"))
   ret <- ret %>% bind_rows(
     tmle$estimates %>% mutate(method = "tmle" , spec = "covariates", trt = "clean")%>% mutate(weights = "tmle"),
